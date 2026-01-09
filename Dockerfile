@@ -8,6 +8,7 @@ COPY src/StrangelOracle.Domain/StrangelOracle.Domain.csproj src/StrangelOracle.D
 COPY src/StrangelOracle.Application/StrangelOracle.Application.csproj src/StrangelOracle.Application/
 COPY src/StrangelOracle.Infrastructure/StrangelOracle.Infrastructure.csproj src/StrangelOracle.Infrastructure/
 COPY src/StrangelOracle.API/StrangelOracle.API.csproj src/StrangelOracle.API/
+COPY tests/StrangelOracle.Tests/StrangelOracle.Tests.csproj tests/StrangelOracle.Tests/
 
 # Restore dependencies
 RUN dotnet restore
