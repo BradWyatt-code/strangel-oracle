@@ -109,7 +109,6 @@ app.MapGet("/health", () => new
     Message = "The Strangels are always watching."
 });
 
-// Root redirect to Swagger
-app.MapGet("/", () => Results.Redirect("/swagger"));
+
 
 app.Run();
