@@ -46,6 +46,23 @@
             line-height: 1.7;
         }
 
+            /* Global dark overlay to calm background */
+            body::after {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.35);
+            pointer-events: none;
+            z-index: 0;
+}
+
+            /* Ensure content sits above overlay */
+            .oracle-container {
+            position: relative;
+            z-index: 1;
+}
+
+        
         /* Noise texture overlay */
         body::before {
             content: '';
