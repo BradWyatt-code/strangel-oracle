@@ -54,7 +54,7 @@ Confess to them. They will judge.
 ",
         Contact = new OpenApiContact
         {
-            Name = "Brad Williams",
+            Name = "Brad Wyatt",
             Url = new Uri("https://bw8.org")
         }
     });
