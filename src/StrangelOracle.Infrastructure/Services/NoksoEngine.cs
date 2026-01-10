@@ -22,23 +22,23 @@ public sealed class NoksoEngine : IStrangelEngine
         "Something shatters that needed shattering. The pieces will make more sense than the whole.",
         "The falcon strikes. What you were holding falls. Your hands are free now.",
         "A pattern breaks. You've been walking in circles. Now there's a gap in the wall.",
-        "He takes something from you. You won't miss it. You needed to lose it.",
+        "She takes something from you. You won't miss it. You needed to lose it.",
         "The comfortable arrangement collapses. Good. It was suffocating you."
     };
     
     private static readonly string[] Protections =
     {
-        "He circles overhead. Something that was coming toward you veers away.",
+        "She circles overhead. Something that was coming toward you veers away.",
         "A door closes before you reach it. There was nothing good behind it.",
         "You stumble. Because you stumble, you miss what would have hit you.",
         "The falcon's shadow falls across your path. You stop. The danger passes.",
-        "He screams once, sharp. The thing that was hunting you flinches. Leaves."
+        "She screams once, sharp. The thing that was hunting you flinches. Leaves."
     };
     
     private static readonly string[] Refusals =
     {
-        "The falcon watches but does not move. This is your work, not his.",
-        "He could break this for you. He won't. You need to break it yourself.",
+        "The falcon watches but does not move. This is your work, not hers.",
+        "She could break this for you. She won't. You need to break it yourself.",
         "Nok'so turns away. What you asked for is not what you need."
     };
     
