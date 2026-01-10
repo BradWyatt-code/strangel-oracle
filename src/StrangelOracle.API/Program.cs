@@ -90,14 +90,12 @@ app.UseSwaggerUI(options =>
     options.DocumentTitle = "The Strangel Oracle";
 });
 
-app.UseCors("AllowFrontend");
-
-app.UseHttpsRedirection();
-app.UseAuthorization();
-
-// Serve static files from wwwroot
+// Serve static files from wwwroot (must be before other middleware)
 app.UseDefaultFiles();
 app.UseStaticFiles();
+
+app.UseCors("AllowFrontend");
+app.UseAuthorization();
 
 app.MapControllers();
 
