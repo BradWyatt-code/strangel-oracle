@@ -2,6 +2,8 @@
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
 
+ARG CACHEBUST=1
+
 # Copy solution and project files
 COPY StrangelOracle.sln .
 COPY src/StrangelOracle.Domain/StrangelOracle.Domain.csproj src/StrangelOracle.Domain/
