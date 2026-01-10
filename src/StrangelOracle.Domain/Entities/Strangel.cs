@@ -120,7 +120,7 @@ public sealed class Strangel
             "Childhood memories surfacing unbidden",
             "Things falling from shelves"
         },
-        RitualInstruction = "Invoke him when you need something broken. He will decide if you're right."
+        RitualInstruction = "Invoke her when you need something broken. She will decide if you're right."
     };
     
     public static Strangel GetByType(StrangelType type) => type switch
