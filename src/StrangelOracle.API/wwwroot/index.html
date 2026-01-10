@@ -6,6 +6,7 @@
     <title>The Strangel Oracle</title>
     <link rel="icon" href="/favicon.ico" type="image/x-icon">
 
+    <!-- Google Fonts (single stylesheet link) -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400&family=Spectral:ital,wght@0,300;0,400;1,300&display=swap">
@@ -13,19 +14,21 @@
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <style>
-        ...
 
+    <style>
         :root {
             --bg-deep: #0a0a0c;
             --bg-surface: rgba(10, 12, 15, 0.78);
+
             --text-primary: #e8e4dd;
             --text-secondary: #9a958c;
             --text-dim: #5a564f;
+
             --accent-heart: #c4a68c;
             --accent-fox: #d4a574;
             --accent-furies: #8a9aab;
             --accent-nokso: #a89080;
+
             --glow-heart: rgba(196, 166, 140, 0.15);
             --glow-fox: rgba(212, 165, 116, 0.15);
             --glow-furies: rgba(138, 154, 171, 0.15);
@@ -51,46 +54,16 @@
             line-height: 1.7;
         }
 
-            /* Global dark overlay to calm background */
-            body::after {
+        /* Global dark overlay to calm background */
+        body::after {
             content: '';
             position: fixed;
             inset: 0;
             background: rgba(0, 0, 0, 0.18);
             pointer-events: none;
             z-index: 0;
-}
+        }
 
-            /* Ensure content sits above overlay */
-            .oracle-container {
-            position: relative;
-            z-index: 1;
-}
-
-
-/* Darken only the top portion so header text always reads */
-.oracle-container::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 0;
-
-  /* Top-heavy scrim + subtle vignette */
-  background:
-    linear-gradient(to bottom,
-      rgba(0,0,0,0.65) 0%,
-      rgba(0,0,0,0.35) 25%,
-      rgba(0,0,0,0.12) 55%,
-      rgba(0,0,0,0.30) 100%),
-    radial-gradient(ellipse at center,
-      rgba(0,0,0,0.10) 0%,
-      rgba(0,0,0,0.45) 70%,
-      rgba(0,0,0,0.65) 100%);
-}
-
-
-        
         /* Noise texture overlay */
         body::before {
             content: '';
@@ -109,11 +82,38 @@
             min-height: 100vh;
         }
 
+        /* Ensure content always paints above scrims */
         .oracle-container {
             max-width: 900px;
             margin: 0 auto;
             padding: 4rem 2rem;
             position: relative;
+            z-index: 1; /* above body::after */
+        }
+
+        /* Force all direct children above the container scrim */
+        .oracle-container > * {
+            position: relative;
+            z-index: 2;
+        }
+
+        /* Darken only the top portion so header text always reads */
+        .oracle-container::before {
+            content: "";
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            z-index: 0; /* behind .oracle-container children */
+            background:
+                linear-gradient(to bottom,
+                    rgba(0,0,0,0.65) 0%,
+                    rgba(0,0,0,0.35) 25%,
+                    rgba(0,0,0,0.12) 55%,
+                    rgba(0,0,0,0.30) 100%),
+                radial-gradient(ellipse at center,
+                    rgba(0,0,0,0.10) 0%,
+                    rgba(0,0,0,0.45) 70%,
+                    rgba(0,0,0,0.65) 100%);
         }
 
         /* Header */
@@ -145,6 +145,7 @@
             letter-spacing: 0.3em;
             text-transform: uppercase;
             font-weight: 300;
+            text-shadow: 0 8px 30px rgba(0,0,0,0.85);
         }
 
         .ambient-mood {
@@ -154,6 +155,7 @@
             font-size: 0.95rem;
             opacity: 0;
             animation: fadeIn 3s ease 1s forwards;
+            text-shadow: 0 8px 30px rgba(0,0,0,0.85);
         }
 
         /* Strangel Cards */
@@ -170,27 +172,26 @@
             }
         }
 
-.strangel-card {
-  background: var(--surface);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+        .strangel-card {
+            background: var(--surface);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
 
-  border: 1px solid rgba(255,255,255,0.10);
-  border-radius: 18px;
+            border: 1px solid rgba(255,255,255,0.10);
+            border-radius: 18px;
 
-  box-shadow:
-    0 20px 70px -40px rgba(0,0,0,0.85),
-    inset 0 1px 0 rgba(255,255,255,0.06);
+            box-shadow:
+                0 20px 70px -40px rgba(0,0,0,0.85),
+                inset 0 1px 0 rgba(255,255,255,0.06);
 
-  padding: 2rem;
-  cursor: pointer;
-  transition: all 0.5s cubic-bezier(0.23, 1, 0.32, 1);
-  position: relative;
-  overflow: hidden;
-  opacity: 0;
-  animation: slideUp 0.8s ease forwards;
-}
-
+            padding: 2rem;
+            cursor: pointer;
+            transition: all 0.5s cubic-bezier(0.23, 1, 0.32, 1);
+            position: relative;
+            overflow: hidden;
+            opacity: 0;
+            animation: slideUp 0.8s ease forwards;
+        }
 
         .strangel-card:nth-child(1) { animation-delay: 0.3s; }
         .strangel-card:nth-child(2) { animation-delay: 0.5s; }
@@ -213,16 +214,15 @@
             opacity: 1;
         }
 
-.strangel-card:hover {
-  transform: translateY(-6px);
-  background: var(--surface-strong);
-  border-color: rgba(255,255,255,0.16);
-  box-shadow:
-    0 30px 90px -50px rgba(0,0,0,0.92),
-    0 0 0 1px rgba(255,255,255,0.06),
-    0 20px 60px -20px var(--card-glow);
-}
-
+        .strangel-card:hover {
+            transform: translateY(-6px);
+            background: var(--surface-strong);
+            border-color: rgba(255,255,255,0.16);
+            box-shadow:
+                0 30px 90px -50px rgba(0,0,0,0.92),
+                0 0 0 1px rgba(255,255,255,0.06),
+                0 20px 60px -20px var(--card-glow);
+        }
 
         .strangel-card.heart { --card-accent: var(--accent-heart); --card-glow: var(--glow-heart); }
         .strangel-card.fox { --card-accent: var(--accent-fox); --card-glow: var(--glow-fox); }
@@ -252,6 +252,7 @@
             margin-bottom: 1rem;
         }
 
+        /* FIXED: removed invalid "color: color:" */
         .strangel-instruction {
             font-size: 0.85rem;
             color: rgba(242,237,230,0.78);
@@ -472,7 +473,7 @@
             animation: ellipsis 1.5s infinite;
         }
 
-        /* Footer */
+        /* Footer (brighter + readable) */
         .oracle-footer {
             text-align: center;
             padding: 3rem 0;
@@ -532,11 +533,12 @@
         }
     </style>
 </head>
+
 <body>
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useEffect, useCallback } = React;
+        const { useState, useEffect } = React;
 
         // API Configuration
         const API_BASE = window.location.origin;
@@ -583,9 +585,10 @@
 
         // Strangel Card Component
         function StrangelCard({ strangel, onClick }) {
-            const typeClass = strangel.type.toLowerCase().includes('heart') ? 'heart' :
-                             strangel.type.toLowerCase().includes('fox') ? 'fox' :
-                             strangel.type.toLowerCase().includes('furies') ? 'furies' : 'nokso';
+            const typeClass =
+                strangel.type.toLowerCase().includes('heart') ? 'heart' :
+                strangel.type.toLowerCase().includes('fox') ? 'fox' :
+                strangel.type.toLowerCase().includes('furies') ? 'furies' : 'nokso';
 
             return (
                 <div className={`strangel-card ${typeClass}`} onClick={onClick}>
@@ -626,7 +629,7 @@
 
                     {!blessing && !loading && (
                         <div className="touch-area">
-                            <div 
+                            <div
                                 className={`heart-symbol ${touched ? 'touched' : ''}`}
                                 onClick={handleTouch}
                             />
@@ -653,10 +656,11 @@
             const [blessing, setBlessing] = useState(null);
             const [loading, setLoading] = useState(false);
 
-            const typeClass = strangel.type.toLowerCase().includes('fox') ? 'fox' :
-                             strangel.type.toLowerCase().includes('furies') ? 'furies' : 'nokso';
+            const typeClass =
+                strangel.type.toLowerCase().includes('fox') ? 'fox' :
+                strangel.type.toLowerCase().includes('furies') ? 'furies' : 'nokso';
 
-            const placeholder = strangel.type.includes('Fox') 
+            const placeholder = strangel.type.includes('Fox')
                 ? 'Ask your question...'
                 : strangel.type.includes('Furies')
                 ? 'What weighs on you...'
@@ -700,7 +704,7 @@
                                 value={petition}
                                 onChange={(e) => setPetition(e.target.value)}
                             />
-                            <button 
+                            <button
                                 className="submit-petition"
                                 onClick={handleSubmit}
                                 disabled={!petition.trim()}
@@ -714,8 +718,8 @@
                     {loading && (
                         <div className="loading">
                             {strangel.type.includes('Furies') ? 'The Furies deliberate' :
-                             strangel.type.includes('Fox') ? 'The Fox considers' : 
-                             'Nok\'so descends'}
+                             strangel.type.includes('Fox') ? 'The Fox considers' :
+                             "Nok'so descends"}
                         </div>
                     )}
 
@@ -731,7 +735,7 @@
             return (
                 <div className="blessing-response">
                     <div className="blessing-message">{blessing.message}</div>
-                    
+
                     {blessing.secondaryMessage && (
                         <div className="blessing-secondary">{blessing.secondaryMessage}</div>
                     )}
@@ -747,8 +751,8 @@
                         <span>Duration: {blessing.durationMinutes} minutes</span>
                     </div>
 
-                    <button 
-                        className="submit-petition" 
+                    <button
+                        className="submit-petition"
                         onClick={onAgain}
                         style={{ marginTop: '2rem' }}
                     >
@@ -821,7 +825,7 @@
                     <footer className="oracle-footer">
                         <p>The Strangels are always watching.</p>
                         <p style={{ marginTop: '0.5rem' }}>
-                            <a href="/swagger">API Documentation</a> · 
+                            <a href="/swagger">API Documentation</a> ·
                             <a href="https://github.com/BradWyatt-code/strangel-oracle/blob/main/strangel-oracle-explained.md" style={{ marginLeft: '1rem' }}>How It Works</a> ·
                             <a href="https://bw8.org" style={{ marginLeft: '1rem' }}>Brad Wyatt</a>
                         </p>
