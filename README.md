@@ -178,7 +178,7 @@ The Strangels are from *Incantations for Crossing*, a poetry collection about a 
 
 ## Author
 
-**Brad Williams** — [bw8.org](https://bw8.org)
+**Brad Wyatt** — [bw8.org](https://bw8.org)
 
 Playwright, poet, and developer. This project combines degrees in IT, Art, and Music.
 
