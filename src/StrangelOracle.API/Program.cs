@@ -46,7 +46,7 @@ Accept that he may not answer, or may answer wrong on purpose.
 Confess to them. They will judge.
 
 ### Nok'so
-*The Falcon* — Protector and disruptor. Invoke him when something needs breaking.
+*The Falcon* — Protector and disruptor. Invoke her when something needs breaking.
 
 ---
 
