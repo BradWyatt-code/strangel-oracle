@@ -11,6 +11,8 @@
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.5.0" />
   </ItemGroup>
 
+<!-- Force rebuild v1 -->
+
   <ItemGroup>
     <ProjectReference Include="..\StrangelOracle.Application\StrangelOracle.Application.csproj" />
     <ProjectReference Include="..\StrangelOracle.Infrastructure\StrangelOracle.Infrastructure.csproj" />
