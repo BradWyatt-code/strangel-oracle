@@ -1,3 +1,4 @@
+using StrangelOracle.Domain.Enums;
 using Microsoft.AspNetCore.Mvc;
 using StrangelOracle.Application.Prompts;
 using StrangelOracle.Domain.Entities;
@@ -52,7 +53,7 @@ public class OracleController : ControllerBase
         // Record in Soul Ledger
         var entry = SoulLedgerEntry.Create(
             sessionId: request.SessionId,
-            strangel: (Domain.Entities.StrangelType)(int)strangel,
+            strangel: (Domain.Enums.StrangelType)(int)strangel,
             petition: request.Petition,
             response: response.Message,
             outcome: (Domain.Entities.BlessingOutcome)(int)response.Outcome,
@@ -85,7 +86,7 @@ public class OracleController : ControllerBase
             
         var entry = SoulLedgerEntry.Create(
             sessionId: request.SessionId,
-            strangel: Domain.Entities.StrangelType.WomanWithHeart,
+            strangel: Domain.Enums.StrangelType.WomanWithHeart,
             petition: null,
             response: response.Message,
             outcome: Domain.Entities.BlessingOutcome.Touched,
