@@ -1,196 +1,183 @@
 using Microsoft.AspNetCore.Mvc;
-using StrangelOracle.Application.DTOs;
-using StrangelOracle.Application.Interfaces;
-using StrangelOracle.Domain.Enums;
+using StrangelOracle.Application.Prompts;
+using StrangelOracle.Domain.Entities;
+using StrangelOracle.Infrastructure.AI;
+using StrangelOracle.Infrastructure.Repositories;
 
 namespace StrangelOracle.API.Controllers;
 
-/// <summary>
-/// The Strangel Oracle API
-/// 
-/// Through this interface, you may approach the Strange Angels.
-/// Choose wisely. They are always watching.
-/// </summary>
 [ApiController]
 [Route("api/[controller]")]
-[Produces("application/json")]
 public class OracleController : ControllerBase
 {
-    private readonly IOracleService _oracleService;
+    private readonly IStrangelAI _strangelAI;
+    private readonly ISoulLedgerRepository _soulLedger;
     private readonly ILogger<OracleController> _logger;
     
-    public OracleController(IOracleService oracleService, ILogger<OracleController> logger)
+    public OracleController(
+        IStrangelAI strangelAI,
+        ISoulLedgerRepository soulLedger,
+        ILogger<OracleController> logger)
     {
-        _oracleService = oracleService;
+        _strangelAI = strangelAI;
+        _soulLedger = soulLedger;
         _logger = logger;
     }
     
     /// <summary>
-    /// Check the presence of all Strangels
+    /// Consult a Strangel and receive their response.
+    /// The interaction is recorded in your Soul Ledger.
     /// </summary>
-    /// <remarks>
-    /// The Strangels move through the city at their own pace.
-    /// Some are always present. Some appear only at certain hours.
-    /// Check before you approach.
-    /// </remarks>
-    [HttpGet("presence")]
-    [ProducesResponseType(typeof(OraclePresence), StatusCodes.Status200OK)]
-    public async Task<ActionResult<OraclePresence>> GetPresence()
-    {
-        var presence = await _oracleService.GetPresenceAsync();
-        return Ok(presence);
-    }
-    
-    /// <summary>
-    /// Get information about all Strangels
-    /// </summary>
-    [HttpGet("strangels")]
-    [ProducesResponseType(typeof(IEnumerable<StrangelInfo>), StatusCodes.Status200OK)]
-    public async Task<ActionResult<IEnumerable<StrangelInfo>>> GetAllStrangels()
-    {
-        var strangels = await _oracleService.GetAllStrangelsAsync();
-        return Ok(strangels);
-    }
-    
-    /// <summary>
-    /// Get information about a specific Strangel
-    /// </summary>
-    /// <param name="type">The Strangel to learn about</param>
-    [HttpGet("strangels/{type}")]
-    [ProducesResponseType(typeof(StrangelInfo), StatusCodes.Status200OK)]
+    [HttpPost("consult")]
+    [ProducesResponseType(typeof(ConsultResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public async Task<ActionResult<StrangelInfo>> GetStrangel(string type)
+    public async Task<ActionResult<ConsultResponse>> Consult(
+        [FromBody] ConsultRequest request,
+        CancellationToken cancellationToken)
     {
-        if (!Enum.TryParse<StrangelType>(type, true, out var strangelType))
+        if (!Enum.TryParse<StrangelType>(request.Strangel, ignoreCase: true, out var strangel))
         {
-            return BadRequest($"Unknown Strangel: {type}. Known Strangels are: {string.Join(", ", Enum.GetNames<StrangelType>())}");
+            return BadRequest(new { error = "Unknown Strangel. Choose: WomanWithHeart, Fox, Furies, or Nokso" });
         }
         
-        var info = await _oracleService.GetStrangelInfoAsync(strangelType);
-        return Ok(info);
-    }
-    
-    /// <summary>
-    /// Seek a blessing from a Strangel
-    /// </summary>
-    /// <remarks>
-    /// Approach with intention. Some Strangels require a petition.
-    /// Some refuse petitions entirely. Some help. Some don't.
-    /// The outcome is never guaranteed.
-    /// </remarks>
-    /// <param name="request">Your petition to the Strangel</param>
-    [HttpPost("seek")]
-    [ProducesResponseType(typeof(BlessingResponse), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public async Task<ActionResult<BlessingResponse>> SeekBlessing([FromBody] BlessingRequest request)
-    {
-        _logger.LogInformation("Blessing sought from {Strangel}", request.Strangel);
+        _logger.LogInformation("Seeker {SessionId} consults {Strangel}", 
+            request.SessionId, strangel);
         
-        try
-        {
-            var blessing = await _oracleService.SeekBlessingAsync(request);
-            return Ok(blessing);
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(ex.Message);
-        }
+        // Consult the Strangel via AI
+        var response = await _strangelAI.ConsultAsync(
+            strangel, 
+            request.Petition, 
+            cancellationToken);
+        
+        // Record in Soul Ledger
+        var entry = SoulLedgerEntry.Create(
+            sessionId: request.SessionId,
+            strangel: (Domain.Entities.StrangelType)(int)strangel,
+            petition: request.Petition,
+            response: response.Message,
+            outcome: (Domain.Entities.BlessingOutcome)(int)response.Outcome,
+            intensity: response.Intensity
+        );
+        
+        await _soulLedger.RecordAsync(entry, cancellationToken);
+        
+        return Ok(new ConsultResponse(
+            Strangel: strangel.ToString(),
+            Message: response.Message,
+            Outcome: response.Outcome.ToString(),
+            Intensity: response.Intensity,
+            RecordedAt: entry.BestowedAt
+        ));
     }
     
     /// <summary>
-    /// Touch the Woman with Heart
+    /// Touch the Woman with Heart. No words needed.
     /// </summary>
-    /// <remarks>
-    /// You do not pray to her. You do not speak.
-    /// You touch. She receives. Something shifts.
-    /// 
-    /// This is her only interaction. It is enough.
-    /// </remarks>
     [HttpPost("touch")]
-    [ProducesResponseType(typeof(BlessingResponse), StatusCodes.Status200OK)]
-    public async Task<ActionResult<BlessingResponse>> TouchHeart()
+    [ProducesResponseType(typeof(ConsultResponse), StatusCodes.Status200OK)]
+    public async Task<ActionResult<ConsultResponse>> Touch(
+        [FromBody] TouchRequest request,
+        CancellationToken cancellationToken)
     {
-        _logger.LogInformation("The Woman with Heart was touched");
+        var response = await _strangelAI.ConsultAsync(
+            StrangelType.WomanWithHeart,
+            cancellationToken: cancellationToken);
+            
+        var entry = SoulLedgerEntry.Create(
+            sessionId: request.SessionId,
+            strangel: Domain.Entities.StrangelType.WomanWithHeart,
+            petition: null,
+            response: response.Message,
+            outcome: Domain.Entities.BlessingOutcome.Touched,
+            intensity: response.Intensity
+        );
         
-        var blessing = await _oracleService.TouchHeartAsync();
-        return Ok(blessing);
+        await _soulLedger.RecordAsync(entry, cancellationToken);
+        
+        return Ok(new ConsultResponse(
+            Strangel: "WomanWithHeart",
+            Message: response.Message,
+            Outcome: "Touched",
+            Intensity: response.Intensity,
+            RecordedAt: entry.BestowedAt
+        ));
     }
     
     /// <summary>
-    /// Petition the Fox
+    /// Retrieve your Soul Ledger—the record of all your encounters.
     /// </summary>
-    /// <remarks>
-    /// Ask him a question. Accept that he may not answer,
-    /// or may answer wrong on purpose.
-    /// The Fox helps those who don't need help,
-    /// and confuses those who think they understand.
-    /// </remarks>
-    /// <param name="question">Your question for the Fox</param>
-    [HttpPost("petition/fox")]
-    [ProducesResponseType(typeof(BlessingResponse), StatusCodes.Status200OK)]
-    public async Task<ActionResult<BlessingResponse>> PetitionFox([FromBody] string? question)
+    [HttpGet("ledger/{sessionId}")]
+    [ProducesResponseType(typeof(LedgerResponse), StatusCodes.Status200OK)]
+    public async Task<ActionResult<LedgerResponse>> GetLedger(
+        string sessionId,
+        CancellationToken cancellationToken)
     {
-        _logger.LogInformation("The Fox was petitioned");
+        var entries = await _soulLedger.GetBySessionAsync(sessionId, cancellationToken);
+        var summary = await _soulLedger.GetSessionSummaryAsync(sessionId, cancellationToken);
         
-        var request = new BlessingRequest
-        {
-            Strangel = StrangelType.Fox,
-            Petition = question
-        };
-        
-        var blessing = await _oracleService.SeekBlessingAsync(request);
-        return Ok(blessing);
-    }
-    
-    /// <summary>
-    /// Confess to the Furies
-    /// </summary>
-    /// <remarks>
-    /// Tell them what weighs on you.
-    /// They will judge. They always judge.
-    /// But judgment is not always condemnation.
-    /// Sometimes it is clarity.
-    /// </remarks>
-    /// <param name="confession">What you carry</param>
-    [HttpPost("confess")]
-    [ProducesResponseType(typeof(BlessingResponse), StatusCodes.Status200OK)]
-    public async Task<ActionResult<BlessingResponse>> ConfessToFuries([FromBody] string? confession)
-    {
-        _logger.LogInformation("A confession was made to the Furies");
-        
-        var request = new BlessingRequest
-        {
-            Strangel = StrangelType.Furies,
-            Petition = confession
-        };
-        
-        var blessing = await _oracleService.SeekBlessingAsync(request);
-        return Ok(blessing);
-    }
-    
-    /// <summary>
-    /// Invoke Nok'so
-    /// </summary>
-    /// <remarks>
-    /// Call him when you need something broken.
-    /// He will decide if you're right.
-    /// He does not explain. He does not apologize.
-    /// He acts, or he doesn't.
-    /// </remarks>
-    /// <param name="request">What needs breaking</param>
-    [HttpPost("invoke/nokso")]
-    [ProducesResponseType(typeof(BlessingResponse), StatusCodes.Status200OK)]
-    public async Task<ActionResult<BlessingResponse>> InvokeNokso([FromBody] string? request)
-    {
-        _logger.LogInformation("Nok'so was invoked");
-        
-        var blessingRequest = new BlessingRequest
-        {
-            Strangel = StrangelType.Nokso,
-            Petition = request
-        };
-        
-        var blessing = await _oracleService.SeekBlessingAsync(blessingRequest);
-        return Ok(blessing);
+        return Ok(new LedgerResponse(
+            SessionId: sessionId,
+            Summary: new LedgerSummary(
+                TotalEncounters: entries.Count,
+                Blessed: summary.TotalBlessings,
+                Denied: summary.TotalDenials,
+                Judged: summary.TotalJudgments,
+                Disrupted: summary.TotalDisruptions,
+                Touched: summary.TotalTouches,
+                FirstEncounter: summary.FirstEncounter,
+                LastEncounter: summary.LastEncounter
+            ),
+            Entries: entries.Select(e => new LedgerEntry(
+                Strangel: e.Strangel.ToString(),
+                Petition: e.Petition,
+                Response: e.Response,
+                Outcome: e.Outcome.ToString(),
+                Intensity: e.Intensity,
+                BestowedAt: e.BestowedAt
+            )).ToList()
+        ));
     }
 }
+
+// Request/Response DTOs
+public sealed record ConsultRequest(
+    string SessionId,
+    string Strangel,
+    string? Petition = null
+);
+
+public sealed record TouchRequest(string SessionId);
+
+public sealed record ConsultResponse(
+    string Strangel,
+    string Message,
+    string Outcome,
+    double Intensity,
+    DateTime RecordedAt
+);
+
+public sealed record LedgerResponse(
+    string SessionId,
+    LedgerSummary Summary,
+    List<LedgerEntry> Entries
+);
+
+public sealed record LedgerSummary(
+    int TotalEncounters,
+    int Blessed,
+    int Denied,
+    int Judged,
+    int Disrupted,
+    int Touched,
+    DateTime? FirstEncounter,
+    DateTime? LastEncounter
+);
+
+public sealed record LedgerEntry(
+    string Strangel,
+    string? Petition,
+    string Response,
+    string Outcome,
+    double Intensity,
+    DateTime BestowedAt
+);
