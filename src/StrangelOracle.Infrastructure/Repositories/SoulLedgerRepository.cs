@@ -1,3 +1,4 @@
+using StrangelOracle.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
 using StrangelOracle.Domain.Entities;
 using StrangelOracle.Infrastructure.Data;

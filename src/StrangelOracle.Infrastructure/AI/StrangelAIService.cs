@@ -1,3 +1,4 @@
+using StrangelOracle.Domain.Enums;
 using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
 using StrangelOracle.Application.Prompts;

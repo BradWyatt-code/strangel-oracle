@@ -1,3 +1,5 @@
+using StrangelOracle.Domain.Enums;
+
 namespace StrangelOracle.Domain.Entities;
 
 /// <summary>

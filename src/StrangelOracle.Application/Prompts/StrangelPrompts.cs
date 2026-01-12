@@ -1,3 +1,5 @@
+using StrangelOracle.Domain.Enums;
+
 namespace StrangelOracle.Application.Prompts;
 
 /// <summary>
@@ -106,12 +108,4 @@ public static class StrangelPrompts
     };
 }
 
-// This should match your existing enum in Domain
-public enum StrangelType
-{
-    WomanWithHeart,
-    Fox,
-    Furies,
-    Nokso
-}
 
