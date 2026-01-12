@@ -1,14 +1,45 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.OpenApi.Models;
 using StrangelOracle.Application.Interfaces;
 using StrangelOracle.Application.Services;
 using StrangelOracle.Domain.Interfaces;
 using StrangelOracle.Infrastructure.Services;
-using Microsoft.OpenApi.Models;
+using StrangelOracle.Infrastructure.AI;
+using StrangelOracle.Infrastructure.Data;
+using StrangelOracle.Infrastructure.Repositories;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container
+// =============================================================================
+// DATABASE CONFIGURATION (Phase 2)
+// =============================================================================
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
+    ?? Environment.GetEnvironmentVariable("DATABASE_URL")
+    ?? throw new InvalidOperationException("Database connection string not configured");
 
-// Register Strangel engines (Strategy pattern)
+// Railway uses postgres:// but Npgsql expects postgresql://
+if (connectionString.StartsWith("postgres://"))
+{
+    connectionString = connectionString.Replace("postgres://", "postgresql://");
+}
+
+builder.Services.AddDbContext<StrangelDbContext>(options =>
+    options.UseNpgsql(connectionString));
+
+// =============================================================================
+// SEMANTIC KERNEL - AI CONFIGURATION (Phase 2)
+// =============================================================================
+builder.Services.AddSemanticKernel(builder.Configuration);
+builder.Services.AddScoped<IStrangelAI, StrangelAIService>();
+
+// =============================================================================
+// REPOSITORY REGISTRATION (Phase 2)
+// =============================================================================
+builder.Services.AddScoped<ISoulLedgerRepository, SoulLedgerRepository>();
+
+// =============================================================================
+// STRANGEL ENGINES - Strategy Pattern (Phase 1 - keeping these)
+// =============================================================================
 builder.Services.AddScoped<IStrangelEngine, WomanWithHeartEngine>();
 builder.Services.AddScoped<IStrangelEngine, FoxEngine>();
 builder.Services.AddScoped<IStrangelEngine, FuriesEngine>();
@@ -17,19 +48,21 @@ builder.Services.AddScoped<IStrangelEngine, NoksoEngine>();
 // Register application services
 builder.Services.AddScoped<IOracleService, OracleService>();
 
-// Add controllers
+// =============================================================================
+// API CONFIGURATION
+// =============================================================================
 builder.Services.AddControllers();
-
-// Configure Swagger/OpenAPI
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
     options.SwaggerDoc("v1", new OpenApiInfo
     {
-        Version = "v1",
+        Version = "v2.0",
         Title = "The Strangel Oracle",
         Description = @"
 ## A Devotional Engine for Strange Angels
+
+**Phase 2: AI-Powered Responses with Soul Ledger Persistence**
 
 The Strangels are mythological entities inhabiting modern New York. 
 Through this API, you may approach them—carefully.
@@ -50,6 +83,11 @@ Confess to them. They will judge.
 
 ---
 
+### New in Phase 2
+- **AI-Powered Responses** — Each Strangel speaks through OpenAI with unique personality
+- **Soul Ledger** — Every blessing, denial, and judgment is permanently recorded
+
+---
 *The Strangels are always watching.*
 ",
         Contact = new OpenApiContact
@@ -68,7 +106,9 @@ Confess to them. They will judge.
     }
 });
 
-// Configure CORS for frontend
+// =============================================================================
+// CORS CONFIGURATION
+// =============================================================================
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
@@ -81,11 +121,22 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline
+// =============================================================================
+// DATABASE MIGRATION (Phase 2) - Auto-creates soul_ledger table
+// =============================================================================
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<StrangelDbContext>();
+    await db.Database.MigrateAsync();
+}
+
+// =============================================================================
+// MIDDLEWARE PIPELINE
+// =============================================================================
 app.UseSwagger();
 app.UseSwaggerUI(options =>
 {
-    options.SwaggerEndpoint("/swagger/v1/swagger.json", "Strangel Oracle v1");
+    options.SwaggerEndpoint("/swagger/v1/swagger.json", "Strangel Oracle v2");
     options.RoutePrefix = "swagger";
     options.DocumentTitle = "The Strangel Oracle";
 });
@@ -96,7 +147,6 @@ app.UseStaticFiles();
 
 app.UseCors("AllowFrontend");
 app.UseAuthorization();
-
 app.MapControllers();
 
 // Health check endpoint
@@ -104,9 +154,12 @@ app.MapGet("/health", () => new
 { 
     Status = "The Oracle is listening",
     Timestamp = DateTime.UtcNow,
-    Message = "The Strangels are always watching."
+    Message = "The Strangels are always watching.",
+    Phase = "2.0 - AI-Powered"
 });
 
-
-
-app.Run();
+// =============================================================================
+// START APPLICATION
+// =============================================================================
+var port = Environment.GetEnvironmentVariable("PORT") ?? "8080";
+app.Run($"http://0.0.0.0:{port}");
