@@ -2,7 +2,7 @@
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
 
-ARG CACHEBUST=1
+ARG CACHEBUST=2
 RUN echo "CACHEBUST=$CACHEBUST"
 
 # Copy solution and project files
