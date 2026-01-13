@@ -182,3 +182,4 @@ public sealed record LedgerEntry(
     double Intensity,
     DateTime BestowedAt
 );
+// Phase 2 rebuild Mon Jan 12 20:16:00 PST 2026
