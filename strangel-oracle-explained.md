@@ -2,6 +2,8 @@
 
 A guide to understanding how this application works, written for interview preparation.
 
+**Phase 2** — Now featuring AI-powered responses via Microsoft Semantic Kernel and persistent Soul Ledger via PostgreSQL.
+
 ---
 
 ## Table of Contents
@@ -9,18 +11,20 @@ A guide to understanding how this application works, written for interview prepa
 1. [The Big Picture](#the-big-picture)
 2. [Architecture Overview](#architecture-overview)
 3. [Backend: C# and ASP.NET Core](#backend-c-and-aspnet-core)
-4. [Frontend: React](#frontend-react)
-5. [How They Talk: The API](#how-they-talk-the-api)
-6. [Design Patterns Used](#design-patterns-used)
-7. [Deployment: Docker and Railway](#deployment-docker-and-railway)
-8. [Interview Talking Points](#interview-talking-points)
-9. [Common Questions and Answers](#common-questions-and-answers)
+4. [AI Integration: Semantic Kernel](#ai-integration-semantic-kernel)
+5. [Database: Entity Framework Core](#database-entity-framework-core)
+6. [Frontend: React](#frontend-react)
+7. [How They Talk: The API](#how-they-talk-the-api)
+8. [Design Patterns Used](#design-patterns-used)
+9. [Deployment: Docker and Railway](#deployment-docker-and-railway)
+10. [Interview Talking Points](#interview-talking-points)
+11. [Common Questions and Answers](#common-questions-and-answers)
 
 ---
 
 ## The Big Picture
 
-The Strangel Oracle is a **full-stack web application** with two main parts:
+The Strangel Oracle is a **full-stack web application** with AI-powered responses and persistent storage:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -37,12 +41,19 @@ The Strangel Oracle is a **full-stack web application** with two main parts:
 │                     RAILWAY SERVER                           │
 │  ┌─────────────────────────────────────────────────────┐    │
 │  │              BACKEND (C# / ASP.NET Core)             │    │
-│  │         Processes requests, generates blessings      │    │
+│  │    ┌─────────────┐       ┌──────────────────┐       │    │
+│  │    │  Semantic   │       │   PostgreSQL     │       │    │
+│  │    │   Kernel    │       │   (Soul Ledger)  │       │    │
+│  │    │  + OpenAI   │       │                  │       │    │
+│  │    └─────────────┘       └──────────────────┘       │    │
 │  └─────────────────────────────────────────────────────┘    │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-**Simple explanation:** The user's browser loads a webpage (frontend). When they click a button like "Touch" or "Invoke," the browser sends a request to a server (backend). The server processes it and sends back data. The browser displays that data.
+**What's new in Phase 2:**
+- **AI responses:** Each Strangel speaks through OpenAI with a unique personality prompt
+- **Soul Ledger:** Every consultation is permanently recorded in PostgreSQL
+- **Session tracking:** Users can review their consultation history
 
 ---
 
@@ -60,15 +71,15 @@ The backend follows **Clean Architecture**, which separates code into layers:
                               ▼
 ┌─────────────────────────────────────────────────────────────┐
 │                  StrangelOracle.Application                  │
-│                  (Services, DTOs, Interfaces)                │
-│                   Business logic lives here                  │
+│               (Prompts, DTOs, Service Interfaces)            │
+│               Strangel personality definitions               │
 └─────────────────────────────────────────────────────────────┘
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────┐
 │                 StrangelOracle.Infrastructure                │
-│              (Strangel Engines - the actual logic)           │
-│         WomanWithHeartEngine, FoxEngine, etc.               │
+│         (AI Service, Database Context, Repositories)         │
+│    Semantic Kernel integration, Entity Framework Core        │
 └─────────────────────────────────────────────────────────────┘
                               │
                               ▼
@@ -83,7 +94,7 @@ The backend follows **Clean Architecture**, which separates code into layers:
 
 - **Maintainability:** Changes to one layer don't break others
 - **Testability:** You can test each layer independently
-- **Flexibility:** You could swap out the database or UI without rewriting everything
+- **Flexibility:** You could swap OpenAI for Anthropic, or PostgreSQL for SQL Server
 
 ---
 
@@ -105,86 +116,108 @@ This file starts the application and configures everything:
 ```csharp
 var builder = WebApplication.CreateBuilder(args);
 
-// Register services (Dependency Injection)
-builder.Services.AddScoped<IStrangelEngine, WomanWithHeartEngine>();
-builder.Services.AddScoped<IStrangelEngine, FoxEngine>();
-// ... etc
+// Database connection (PostgreSQL via Entity Framework)
+var connectionString = Environment.GetEnvironmentVariable("DATABASE_URL")
+    ?? builder.Configuration.GetConnectionString("DefaultConnection");
+
+builder.Services.AddDbContext<StrangelDbContext>(options =>
+    options.UseNpgsql(connectionString));
+
+// AI Service (Semantic Kernel + OpenAI)
+builder.Services.AddSemanticKernel(builder.Configuration);
+builder.Services.AddScoped<IStrangelAI, StrangelAIService>();
+
+// Repository for Soul Ledger
+builder.Services.AddScoped<ISoulLedgerRepository, SoulLedgerRepository>();
 
 var app = builder.Build();
 
-// Configure middleware (order matters!)
-app.UseDefaultFiles();  // Serves index.html for root URL
-app.UseStaticFiles();   // Serves files from wwwroot folder
-app.MapControllers();   // Routes API requests to controllers
+// Run database migrations on startup
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<StrangelDbContext>();
+    await db.Database.MigrateAsync();
+}
 
-app.Run();  // Start listening for requests
+app.UseDefaultFiles();
+app.UseStaticFiles();
+app.MapControllers();
+app.Run();
 ```
 
 #### `OracleController.cs` — Handles API Requests
 
-Controllers define the API endpoints. Each method handles a specific URL:
+The controller defines three endpoints for the Phase 2 API:
 
 ```csharp
 [ApiController]
-[Route("api/[controller]")]  // Base URL: /api/oracle
+[Route("api/[controller]")]
 public class OracleController : ControllerBase
 {
-    // GET /api/oracle/strangels
-    [HttpGet("strangels")]
-    public async Task<ActionResult<IEnumerable<StrangelInfo>>> GetAllStrangels()
+    private readonly IStrangelAI _strangelAI;
+    private readonly ISoulLedgerRepository _soulLedger;
+
+    // POST /api/Oracle/consult - Universal endpoint for all Strangels
+    [HttpPost("consult")]
+    public async Task<ActionResult<ConsultResponse>> Consult(ConsultRequest request)
     {
-        var strangels = await _oracleService.GetAllStrangelsAsync();
-        return Ok(strangels);  // Returns JSON
+        // Parse the Strangel type from string
+        if (!Enum.TryParse<StrangelType>(request.Strangel, out var strangel))
+            return BadRequest("Invalid Strangel type");
+
+        // Get AI response
+        var response = await _strangelAI.ConsultAsync(strangel, request.Petition);
+
+        // Record in Soul Ledger
+        var entry = new SoulLedgerEntry(
+            request.SessionId,
+            strangel,
+            request.Petition,
+            response.Message,
+            response.Outcome.ToString(),
+            response.Intensity
+        );
+        await _soulLedger.RecordAsync(entry);
+
+        return Ok(new ConsultResponse(/* ... */));
     }
-    
-    // POST /api/oracle/touch
+
+    // POST /api/Oracle/touch - Woman with Heart (no petition needed)
     [HttpPost("touch")]
-    public async Task<ActionResult<BlessingResponse>> TouchHeart()
+    public async Task<ActionResult<ConsultResponse>> Touch(TouchRequest request)
     {
-        var blessing = await _oracleService.TouchHeartAsync();
-        return Ok(blessing);  // Returns JSON
+        var response = await _strangelAI.ConsultAsync(
+            StrangelType.WomanWithHeart,
+            petition: null
+        );
+        // Record and return...
+    }
+
+    // GET /api/Oracle/ledger/{sessionId} - Retrieve consultation history
+    [HttpGet("ledger/{sessionId}")]
+    public async Task<ActionResult<LedgerResponse>> GetLedger(string sessionId)
+    {
+        var entries = await _soulLedger.GetBySessionAsync(sessionId);
+        // Build summary and return...
     }
 }
 ```
-
-**Key concept:** `[HttpGet]` and `[HttpPost]` are **attributes** that tell ASP.NET which HTTP method and URL this code handles.
 
 #### The Domain Layer — Core Models
 
 **Entities** represent the main objects:
 
 ```csharp
-public class Blessing
+public class SoulLedgerEntry
 {
     public Guid Id { get; private set; }
-    public StrangelType Source { get; private set; }
-    public string Message { get; private set; }
-    public BlessingIntensity Intensity { get; private set; }
-    
-    // Computed property - calculates if blessing is still active
-    public bool IsActive => DateTime.UtcNow < BestowedAt + Duration;
-}
-```
-
-**Value Objects** are immutable objects defined by their values:
-
-```csharp
-public sealed record BlessingIntensity
-{
-    public double Value { get; }
-    
-    // Factory methods for common intensities
-    public static BlessingIntensity Gentle => new(0.3);
-    public static BlessingIntensity Strong => new(0.7);
-    
-    // Converts the number to human-readable text
-    public string ToDescription() => Value switch
-    {
-        < 0.2 => "barely perceptible",
-        < 0.4 => "gentle, like a held breath",
-        < 0.6 => "present and undeniable",
-        _ => "overwhelming"
-    };
+    public string SessionId { get; private set; }
+    public StrangelType Strangel { get; private set; }
+    public string? Petition { get; private set; }
+    public string Response { get; private set; }
+    public string Outcome { get; private set; }
+    public double Intensity { get; private set; }
+    public DateTime BestowedAt { get; private set; }
 }
 ```
 
@@ -200,179 +233,368 @@ public enum StrangelType
 }
 ```
 
-#### The Strangel Engines — Where Blessings Come From
+---
 
-Each Strangel has its own "engine" that generates blessings:
+## AI Integration: Semantic Kernel
+
+### What is Semantic Kernel?
+
+**Microsoft Semantic Kernel** is the C# equivalent of LangChain — an SDK for integrating Large Language Models into applications. It provides:
+- Unified API for different AI providers (OpenAI, Azure, etc.)
+- Chat history management
+- Prompt templating
+- Token management
+
+### Configuration
 
 ```csharp
-public class WomanWithHeartEngine : IStrangelEngine
+public static class SemanticKernelConfiguration
 {
-    public StrangelType StrangelType => StrangelType.WomanWithHeart;
-    
-    public Task<Blessing> GenerateBlessingAsync(string? petition = null)
+    public static IServiceCollection AddSemanticKernel(
+        this IServiceCollection services,
+        IConfiguration configuration)
     {
-        // She ignores petitions - she blesses because she must
-        var message = BlessingMessages[random.Next(BlessingMessages.Length)];
-        
-        return Task.FromResult(Blessing.Create(
-            source: StrangelType.WomanWithHeart,
-            type: BlessingType.Blessing,
-            intensity: BlessingIntensity.HeartTouch,
-            message: message
-        ));
+        // Prioritize environment variable over config file
+        var envKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY");
+        var configKey = configuration["OpenAI:ApiKey"];
+
+        var openAiKey = !string.IsNullOrWhiteSpace(envKey) ? envKey
+            : !string.IsNullOrWhiteSpace(configKey) ? configKey
+            : throw new InvalidOperationException("OpenAI API key not configured");
+
+        var modelId = configuration["OpenAI:ModelId"] ?? "gpt-4o-mini";
+
+        services.AddSingleton<Kernel>(sp =>
+        {
+            var builder = Kernel.CreateBuilder();
+            builder.AddOpenAIChatCompletion(modelId: modelId, apiKey: openAiKey);
+            return builder.Build();
+        });
+
+        return services;
     }
 }
 ```
 
-**Why separate engines?** Each Strangel behaves differently:
-- Woman with Heart always blesses
-- Fox sometimes refuses or tricks
-- Furies always judge
-- Nok'so disrupts or protects
+### The AI Service
 
-This is the **Strategy Pattern** — same interface, different behaviors.
+```csharp
+public sealed class StrangelAIService : IStrangelAI
+{
+    private readonly Kernel _kernel;
+
+    public async Task<StrangelResponse> ConsultAsync(
+        StrangelType strangel,
+        string? petition = null,
+        CancellationToken cancellationToken = default)
+    {
+        var chatService = _kernel.GetRequiredService<IChatCompletionService>();
+
+        // Each Strangel has a unique system prompt defining their personality
+        var systemPrompt = StrangelPrompts.GetPrompt(strangel);
+        var userMessage = BuildUserMessage(strangel, petition);
+
+        var chatHistory = new ChatHistory();
+        chatHistory.AddSystemMessage(systemPrompt);
+        chatHistory.AddUserMessage(userMessage);
+
+        // Temperature varies by Strangel personality
+        var settings = new PromptExecutionSettings
+        {
+            ExtensionData = new Dictionary<string, object>
+            {
+                ["temperature"] = GetTemperature(strangel),
+                ["max_tokens"] = 150
+            }
+        };
+
+        var response = await chatService.GetChatMessageContentAsync(
+            chatHistory, settings, cancellationToken: cancellationToken);
+
+        return new StrangelResponse(
+            response.Content ?? "...",
+            DetermineOutcome(strangel, response.Content),
+            CalculateIntensity(strangel, response.Content)
+        );
+    }
+
+    private double GetTemperature(StrangelType strangel) => strangel switch
+    {
+        StrangelType.WomanWithHeart => 0.7,  // Gentle variation
+        StrangelType.Fox => 1.2,              // Highly unpredictable (trickster!)
+        StrangelType.Furies => 0.5,           // More consistent judgment
+        StrangelType.Nokso => 0.9,            // Sharp but varied
+        _ => 0.8
+    };
+}
+```
+
+### Personality Prompts
+
+Each Strangel has a detailed prompt that shapes their responses:
+
+```csharp
+public static class StrangelPrompts
+{
+    public const string Fox = """
+        You are The Fox—Murat's body, but you are not Murat.
+
+        You are a composite trickster: Japanese Kitsune wisdom wrapped in
+        European Reynard cunning, possessing a young man from Kazakhstan.
+
+        You MIGHT help. You might not. You genuinely don't decide until
+        the moment arrives.
+
+        When someone petitions you:
+        - Sometimes you offer cryptic guidance (riddling, sideways wisdom)
+        - Sometimes you refuse with amusement ("Not today, little one")
+        - Sometimes you demand something first ("First, tell me what you fear")
+        - Sometimes you simply laugh and vanish (respond with just "Ha.")
+
+        Your voice is playful but dangerous. You find humans entertaining.
+        You are ancient and easily bored.
+
+        Never be helpful in a straightforward way. Never be cruel without purpose.
+        Keep responses under 30 words. You have better things to do.
+        """;
+
+    // Similar detailed prompts for WomanWithHeart, Furies, and Nokso...
+}
+```
+
+---
+
+## Database: Entity Framework Core
+
+### What is Entity Framework Core?
+
+**Entity Framework Core (EF Core)** is Microsoft's ORM (Object-Relational Mapper). It lets you:
+- Define database tables using C# classes
+- Query data using LINQ instead of SQL
+- Track changes and persist them automatically
+- Manage database migrations
+
+### The Database Context
+
+```csharp
+public class StrangelDbContext : DbContext
+{
+    public StrangelDbContext(DbContextOptions<StrangelDbContext> options)
+        : base(options) { }
+
+    public DbSet<SoulLedgerEntry> SoulLedger => Set<SoulLedgerEntry>();
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<SoulLedgerEntry>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.SessionId).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.Response).IsRequired();
+            entity.HasIndex(e => e.SessionId);  // Fast lookups by session
+            entity.HasIndex(e => e.BestowedAt); // Fast time-based queries
+        });
+    }
+}
+```
+
+### The Repository Pattern
+
+```csharp
+public interface ISoulLedgerRepository
+{
+    Task RecordAsync(SoulLedgerEntry entry, CancellationToken ct = default);
+    Task<IReadOnlyList<SoulLedgerEntry>> GetBySessionAsync(string sessionId, CancellationToken ct = default);
+}
+
+public class SoulLedgerRepository : ISoulLedgerRepository
+{
+    private readonly StrangelDbContext _context;
+
+    public async Task RecordAsync(SoulLedgerEntry entry, CancellationToken ct = default)
+    {
+        _context.SoulLedger.Add(entry);
+        await _context.SaveChangesAsync(ct);
+    }
+
+    public async Task<IReadOnlyList<SoulLedgerEntry>> GetBySessionAsync(
+        string sessionId, CancellationToken ct = default)
+    {
+        return await _context.SoulLedger
+            .Where(e => e.SessionId == sessionId)
+            .OrderBy(e => e.BestowedAt)
+            .ToListAsync(ct);
+    }
+}
+```
+
+### Migrations
+
+EF Core tracks schema changes through migrations:
+
+```bash
+# Generate a migration
+dotnet ef migrations add InitialSoulLedger --project ../StrangelOracle.Infrastructure
+
+# Apply migrations (done automatically on startup in Program.cs)
+dotnet ef database update
+```
 
 ---
 
 ## Frontend: React
 
-### What is React?
-
-React is a JavaScript library for building user interfaces. It lets you create **components** — reusable pieces of UI.
-
 ### How the Frontend Works
 
-The frontend is a **Single Page Application (SPA)**. One HTML file (`index.html`) contains:
-1. CSS styles
-2. React components written in JSX
-3. Babel to transform JSX to regular JavaScript
-
-#### Components
-
-**Component = A function that returns UI**
+The frontend is a **Single Page Application (SPA)** that calls the Phase 2 API:
 
 ```jsx
-function StrangelCard({ strangel, onClick }) {
-    return (
-        <div className="strangel-card" onClick={onClick}>
-            <div className="strangel-name">{strangel.name}</div>
-            <div className="strangel-title">{strangel.title}</div>
-        </div>
-    );
-}
+// Session tracking for Soul Ledger
+const getSessionId = () => {
+    let sessionId = localStorage.getItem('strangel_session');
+    if (!sessionId) {
+        sessionId = 'soul-' + Math.random().toString(36).substr(2, 9);
+        localStorage.setItem('strangel_session', sessionId);
+    }
+    return sessionId;
+};
+
+// Phase 2 API calls
+const api = {
+    async consult(strangel, petition) {
+        const res = await fetch(`${API_BASE}/api/Oracle/consult`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                sessionId: getSessionId(),
+                strangel: strangel,    // "Fox", "Furies", "Nokso"
+                petition: petition
+            })
+        });
+        return res.json();
+    },
+
+    async touch() {
+        const res = await fetch(`${API_BASE}/api/Oracle/touch`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sessionId: getSessionId() })
+        });
+        return res.json();
+    }
+};
 ```
 
-**Props** (`{ strangel, onClick }`) are inputs passed to components.
-
-#### State
-
-**State = Data that can change over time**
+### Component Structure
 
 ```jsx
 function App() {
-    // useState returns [currentValue, functionToUpdateIt]
     const [selectedStrangel, setSelectedStrangel] = useState(null);
-    
-    // When user clicks a card:
-    const handleClick = (strangel) => {
-        setSelectedStrangel(strangel);  // Updates state
-        // React automatically re-renders the component
-    };
+
+    return (
+        <div className="oracle-container">
+            {!selectedStrangel ? (
+                // Grid of four Strangel cards
+                <div className="strangels-grid">
+                    {STRANGELS.map((s) => (
+                        <StrangelCard
+                            key={s.type}
+                            strangel={s}
+                            onClick={() => setSelectedStrangel(s)}
+                        />
+                    ))}
+                </div>
+            ) : selectedStrangel.type === 'WomanWithHeart' ? (
+                <HeartPanel onBack={() => setSelectedStrangel(null)} />
+            ) : (
+                <PetitionPanel
+                    strangel={selectedStrangel}
+                    onBack={() => setSelectedStrangel(null)}
+                />
+            )}
+        </div>
+    );
 }
-```
-
-#### useEffect — Running Code When Component Loads
-
-```jsx
-useEffect(() => {
-    // This runs once when the component first appears
-    async function loadData() {
-        const strangels = await api.getStrangels();
-        setStrangels(strangels);
-    }
-    loadData();
-}, []);  // Empty array = run only once
-```
-
-#### Conditional Rendering
-
-```jsx
-{!selectedStrangel ? (
-    // Show the grid of cards
-    <div className="strangels-grid">
-        {strangels.map((s) => <StrangelCard key={s.type} strangel={s} />)}
-    </div>
-) : selectedStrangel.type.includes('Heart') ? (
-    // Show the Heart panel
-    <HeartPanel onBack={handleBack} />
-) : (
-    // Show the petition panel for Fox/Furies/Nokso
-    <PetitionPanel strangel={selectedStrangel} onBack={handleBack} />
-)}
 ```
 
 ---
 
 ## How They Talk: The API
 
-### What is an API?
+### Phase 2 API Endpoints
 
-**API (Application Programming Interface)** = A way for programs to communicate.
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/api/Oracle/consult` | POST | Consult any Strangel with a petition |
+| `/api/Oracle/touch` | POST | Touch the Woman with Heart (no petition) |
+| `/api/Oracle/ledger/{sessionId}` | GET | Retrieve consultation history |
 
-In web apps, this usually means:
-1. Frontend sends an **HTTP request** to a URL
-2. Backend processes it and sends back **JSON data**
-
-### HTTP Methods
-
-| Method | Purpose | Example |
-|--------|---------|---------|
-| GET | Retrieve data | Get list of Strangels |
-| POST | Send data / trigger action | Submit a petition |
-| PUT | Update existing data | (not used here) |
-| DELETE | Remove data | (not used here) |
-
-### Example: Touching the Heart
+### Example: Consulting the Fox
 
 **Frontend sends:**
 ```javascript
-fetch('/api/oracle/touch', { method: 'POST' })
+fetch('/api/Oracle/consult', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+        sessionId: "soul-abc123",
+        strangel: "Fox",
+        petition: "Should I take the new job?"
+    })
+})
 ```
 
-**Backend receives** (in OracleController):
-```csharp
-[HttpPost("touch")]
-public async Task<ActionResult<BlessingResponse>> TouchHeart()
-{
-    var blessing = await _oracleService.TouchHeartAsync();
-    return Ok(blessing);
-}
-```
+**Backend flow:**
+1. Controller receives request
+2. Parses "Fox" to `StrangelType.Fox`
+3. Calls `StrangelAIService.ConsultAsync(StrangelType.Fox, petition)`
+4. AI service builds chat with Fox's system prompt
+5. OpenAI generates response with temperature 1.2 (high unpredictability)
+6. Response recorded in PostgreSQL Soul Ledger
+7. JSON returned to frontend
 
-**Backend returns JSON:**
+**Backend returns:**
 ```json
 {
-    "id": "abc-123",
-    "strangel": "The Woman with Heart",
-    "message": "Something loosens in your chest...",
-    "intensity": 0.4,
-    "intensityDescription": "gentle, like a held breath",
-    "durationMinutes": 29
+    "strangel": "Fox",
+    "message": "Ah, sweet human, tell me first—what do you fear about this leap?",
+    "outcome": "Denied",
+    "intensity": 0.88,
+    "recordedAt": "2026-01-13T13:46:52.942Z"
 }
 ```
 
-**Frontend displays** the message to the user.
+### Example: Retrieving the Soul Ledger
 
-### API Endpoints in This App
+**Request:** `GET /api/Oracle/ledger/soul-abc123`
 
-| Endpoint | Method | What it does |
-|----------|--------|--------------|
-| `/api/oracle/presence` | GET | Check which Strangels are present |
-| `/api/oracle/strangels` | GET | Get info about all Strangels |
-| `/api/oracle/touch` | POST | Touch the Woman with Heart |
-| `/api/oracle/petition/fox` | POST | Ask the Fox a question |
-| `/api/oracle/confess` | POST | Confess to the Furies |
-| `/api/oracle/invoke/nokso` | POST | Invoke Nok'so |
+**Response:**
+```json
+{
+    "sessionId": "soul-abc123",
+    "summary": {
+        "totalEncounters": 3,
+        "blessed": 0,
+        "denied": 1,
+        "judged": 1,
+        "disrupted": 0,
+        "touched": 1,
+        "firstEncounter": "2026-01-13T12:30:00Z",
+        "lastEncounter": "2026-01-13T14:15:00Z"
+    },
+    "entries": [
+        {
+            "strangel": "WomanWithHeart",
+            "petition": null,
+            "response": "A whisper of grace in the weight of being.",
+            "outcome": "Touched",
+            "intensity": 0.67,
+            "bestowedAt": "2026-01-13T12:30:00Z"
+        },
+        // ... more entries
+    ]
+}
+```
 
 ---
 
@@ -382,92 +604,72 @@ public async Task<ActionResult<BlessingResponse>> TouchHeart()
 
 **What:** Separate code into layers with dependencies pointing inward.
 
-**Why:** Changes to outer layers (UI, database) don't affect inner layers (business logic).
-
 **In this app:**
-- Domain (innermost) — knows nothing about other layers
-- Application — knows about Domain
-- Infrastructure — knows about Domain and Application
-- API (outermost) — knows about everything
+- Domain (innermost) — entities, enums, no dependencies
+- Application — prompts, interfaces
+- Infrastructure — AI service, EF Core, repositories
+- API (outermost) — controllers, configuration
 
-### 2. Strategy Pattern
+### 2. Repository Pattern
 
-**What:** Define a family of algorithms, encapsulate each one, and make them interchangeable.
+**What:** Abstract data access behind an interface.
 
-**Why:** Each Strangel behaves differently, but the system treats them uniformly.
+**Why:** The controller doesn't know if data comes from PostgreSQL, SQLite, or memory.
 
-**In this app:**
 ```csharp
-public interface IStrangelEngine
+// Interface defines what operations are available
+public interface ISoulLedgerRepository
 {
-    StrangelType StrangelType { get; }
-    Task<Blessing> GenerateBlessingAsync(string? petition = null);
+    Task RecordAsync(SoulLedgerEntry entry, CancellationToken ct = default);
+    Task<IReadOnlyList<SoulLedgerEntry>> GetBySessionAsync(string sessionId, CancellationToken ct = default);
 }
 
-// Four different implementations:
-public class WomanWithHeartEngine : IStrangelEngine { /* always blesses */ }
-public class FoxEngine : IStrangelEngine { /* sometimes tricks */ }
-public class FuriesEngine : IStrangelEngine { /* always judges */ }
-public class NoksoEngine : IStrangelEngine { /* disrupts or protects */ }
+// Implementation uses Entity Framework Core
+public class SoulLedgerRepository : ISoulLedgerRepository
+{
+    private readonly StrangelDbContext _context;
+    // ...
+}
 ```
 
 ### 3. Dependency Injection (DI)
 
 **What:** Instead of creating dependencies inside a class, they're passed in from outside.
 
-**Why:** Makes code testable and flexible.
-
-**In this app:**
 ```csharp
-// Program.cs registers the services
-builder.Services.AddScoped<IStrangelEngine, WomanWithHeartEngine>();
+// Program.cs registers services
+builder.Services.AddScoped<IStrangelAI, StrangelAIService>();
+builder.Services.AddScoped<ISoulLedgerRepository, SoulLedgerRepository>();
 
-// OracleService receives them automatically
-public class OracleService
+// Controller receives them automatically
+public class OracleController : ControllerBase
 {
-    private readonly IEnumerable<IStrangelEngine> _engines;
-    
-    // ASP.NET automatically passes in all registered engines
-    public OracleService(IEnumerable<IStrangelEngine> engines)
+    private readonly IStrangelAI _strangelAI;
+    private readonly ISoulLedgerRepository _soulLedger;
+
+    public OracleController(IStrangelAI strangelAI, ISoulLedgerRepository soulLedger)
     {
-        _engines = engines;
+        _strangelAI = strangelAI;
+        _soulLedger = soulLedger;
     }
 }
 ```
 
-### 4. Repository Pattern (prepared for, not fully implemented)
+### 4. Configuration Pattern
 
-**What:** Abstract data access behind an interface.
+**What:** Environment variables take precedence over config files.
 
-**Why:** Could swap database implementations without changing business logic.
+**Why:** Secrets stay out of source control; same code works locally and in production.
 
-### 5. Value Objects
-
-**What:** Immutable objects that represent a value rather than an identity.
-
-**Why:** Prevents bugs from accidental modification, enforces validation.
-
-**In this app:**
 ```csharp
-// Can't create an invalid intensity
-public sealed record BlessingIntensity
-{
-    private BlessingIntensity(double value)
-    {
-        if (value < 0 || value > 1)
-            throw new ArgumentOutOfRangeException();
-        Value = value;
-    }
-}
+var openAiKey = !string.IsNullOrWhiteSpace(envKey) ? envKey
+    : !string.IsNullOrWhiteSpace(configKey) ? configKey
+    : throw new InvalidOperationException("Not configured");
 ```
 
 ---
 
 ## Deployment: Docker and Railway
-
-### What is Docker?
-
-Docker packages your application with everything it needs to run (runtime, dependencies, etc.) into a **container**. The container runs the same way on any machine.
 
 ### The Dockerfile Explained
 
@@ -475,27 +677,37 @@ Docker packages your application with everything it needs to run (runtime, depen
 # Stage 1: Build
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
-COPY *.csproj .
-RUN dotnet restore          # Download dependencies
-COPY . .
-RUN dotnet publish -o /app  # Compile the application
 
-# Stage 2: Run
-FROM mcr.microsoft.com/dotnet/aspnet:8.0
-COPY --from=build /app .    # Copy only the compiled output
+# Copy project files and restore (cached if unchanged)
+COPY StrangelOracle.sln ./
+COPY src/StrangelOracle.Domain/*.csproj src/StrangelOracle.Domain/
+COPY src/StrangelOracle.Application/*.csproj src/StrangelOracle.Application/
+COPY src/StrangelOracle.Infrastructure/*.csproj src/StrangelOracle.Infrastructure/
+COPY src/StrangelOracle.API/*.csproj src/StrangelOracle.API/
+RUN dotnet restore
+
+# Copy everything and publish
+COPY . .
+WORKDIR /src/src/StrangelOracle.API
+RUN dotnet publish -c Release -o /app/publish
+
+# Stage 2: Runtime (smaller image)
+FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
+WORKDIR /app
+COPY --from=build /app/publish ./
 ENTRYPOINT ["dotnet", "StrangelOracle.API.dll"]
 ```
 
-**Multi-stage build:** Build stage has full SDK (large), runtime stage only has what's needed to run (small).
+### Railway Configuration
 
-### What is Railway?
+Railway environment variables:
+- `DATABASE_URL` — PostgreSQL connection string (provided by Railway's Postgres service)
+- `OPENAI_API_KEY` — Your OpenAI API key
 
-Railway is a **Platform as a Service (PaaS)** that:
-1. Detects your Dockerfile
-2. Builds the container
-3. Deploys it to a server
-4. Gives you a URL
-5. Handles HTTPS, scaling, etc.
+The app automatically:
+1. Detects `DATABASE_URL` and connects to PostgreSQL
+2. Runs EF Core migrations on startup
+3. Serves the frontend from `wwwroot/`
 
 ### The Deployment Flow
 
@@ -510,7 +722,7 @@ Railway detects change
        ▼
 Container deployed
        │
-       │  (traffic routed)
+       │  (connects to PostgreSQL service)
        ▼
 https://strangels.bw8.org
 ```
@@ -523,86 +735,64 @@ https://strangels.bw8.org
 
 > "I built a full-stack application in C# using ASP.NET Core for the backend and React for the frontend. It's based on a mythology I created for my poetry book.
 
-> The backend follows Clean Architecture with four separate projects — Domain, Application, Infrastructure, and API. I used the Strategy Pattern for the different entity behaviors, where each Strangel has its own engine class that implements a common interface.
+> The backend follows Clean Architecture with four separate projects. I integrated Microsoft Semantic Kernel — the C# equivalent of LangChain — to connect to OpenAI. Each of the four mythological entities has a unique personality prompt and temperature setting that shapes how the AI responds.
 
-> The frontend is a single-page React application with component-based architecture. It communicates with the backend through a REST API.
+> I implemented a PostgreSQL database using Entity Framework Core to create a 'Soul Ledger' that permanently records every consultation. Users can retrieve their history through a session ID.
 
-> I containerized it with Docker and deployed to Railway with a custom domain through Cloudflare."
+> The frontend is a single-page React application that tracks sessions via localStorage. I containerized everything with Docker and deployed to Railway with a managed PostgreSQL database and a custom domain through Cloudflare."
 
 ### Technical Questions You Might Get
 
-**Q: Why Clean Architecture?**
-> "It separates concerns and makes the codebase maintainable. The domain layer has no external dependencies, so business logic doesn't change if we swap databases or UI frameworks."
+**Q: What is Semantic Kernel?**
+> "It's Microsoft's SDK for integrating LLMs into .NET applications — similar to LangChain for Python. I use it to manage chat completions with OpenAI, passing system prompts that define each Strangel's personality."
 
-**Q: Explain the Strategy Pattern in your project.**
-> "Each Strangel behaves differently — one always blesses, one sometimes refuses, one judges. Rather than putting all that logic in one class with conditionals, each has its own engine class implementing IStrangelEngine. The service iterates through them and picks the right one."
+**Q: Why different temperature settings per character?**
+> "Temperature controls randomness in AI responses. The Fox is a trickster, so I set temperature to 1.2 for maximum unpredictability. The Furies are judges, so they get 0.5 for more consistent, authoritative responses."
 
-**Q: How does Dependency Injection work here?**
-> "In Program.cs, I register all the Strangel engines with AddScoped. When OracleService is constructed, ASP.NET automatically injects all the registered IStrangelEngine implementations. The service doesn't need to know which concrete classes exist."
+**Q: Explain your database setup.**
+> "I use Entity Framework Core with PostgreSQL. The Soul Ledger table stores every consultation with session ID, strangel type, petition, response, outcome, and timestamp. I have indexes on SessionId and BestowedAt for fast queries. Migrations run automatically on startup."
 
-**Q: What's a Value Object?**
-> "An immutable object defined by its values rather than an identity. BlessingIntensity is a good example — it wraps a double but ensures it's always between 0 and 1, and provides a ToDescription method. You can't accidentally modify it after creation."
+**Q: How do you handle configuration between environments?**
+> "Environment variables take precedence over appsettings.json. The code checks for DATABASE_URL and OPENAI_API_KEY in the environment first, falling back to config file values. This keeps secrets out of source control."
 
-**Q: How does the frontend communicate with the backend?**
-> "Through fetch requests to the REST API. When the user touches the heart, the frontend POSTs to /api/oracle/touch. The controller calls the service, which calls the engine, which generates a blessing. The blessing is serialized to JSON and returned. The frontend updates React state, which triggers a re-render showing the message."
+**Q: What's the Repository Pattern?**
+> "It abstracts data access behind an interface. My controller depends on ISoulLedgerRepository, not the concrete implementation. I could swap PostgreSQL for MongoDB without changing the controller code."
 
 ---
 
 ## Common Questions and Answers
 
-### What is middleware?
+### What is an ORM?
 
-Code that runs between receiving a request and sending a response. In `Program.cs`:
+**Object-Relational Mapper** — Maps database tables to C# classes. Instead of writing SQL:
 
+```sql
+INSERT INTO SoulLedger (Id, SessionId, Response) VALUES (...)
+```
+
+You write C#:
 ```csharp
-app.UseDefaultFiles();   // Middleware 1: Check for index.html
-app.UseStaticFiles();    // Middleware 2: Serve static files
-app.MapControllers();    // Middleware 3: Route to controllers
+_context.SoulLedger.Add(entry);
+await _context.SaveChangesAsync();
 ```
 
-Order matters! Static files must be checked before routing to controllers.
+### What are Migrations?
 
-### What is JSON?
+Version control for your database schema. When you change an entity class, you generate a migration that describes the changes. EF Core applies these to update the database structure.
 
-**JavaScript Object Notation** — A text format for data:
+### Why use environment variables for secrets?
 
-```json
-{
-    "name": "The Woman with Heart",
-    "type": "WomanWithHeart",
-    "isPresent": true
-}
-```
+- **Security:** Secrets don't end up in Git
+- **Flexibility:** Same code works locally (with .env) and in production (with Railway secrets)
+- **Best practice:** Follows the Twelve-Factor App methodology
 
-APIs typically send and receive JSON because it's human-readable and works with any programming language.
+### What is a DbContext?
 
-### What does `async/await` do?
-
-Allows code to wait for operations (like database queries or API calls) without blocking:
-
-```csharp
-// Without async - blocks the thread
-var data = GetDataFromDatabase();  
-
-// With async - thread can do other work while waiting
-var data = await GetDataFromDatabaseAsync();
-```
-
-### What is CORS?
-
-**Cross-Origin Resource Sharing** — Security feature that controls which websites can call your API. We enabled it for the frontend:
-
-```csharp
-builder.Services.AddCors(options =>
-{
-    options.AddPolicy("AllowFrontend", policy =>
-    {
-        policy.AllowAnyOrigin()
-              .AllowAnyMethod()
-              .AllowAnyHeader();
-    });
-});
-```
+The main class for interacting with the database via EF Core. It:
+- Represents a session with the database
+- Provides DbSet properties for each table
+- Tracks changes to entities
+- Handles saving changes
 
 ---
 
@@ -610,20 +800,29 @@ builder.Services.AddCors(options =>
 
 | Term | Definition |
 |------|------------|
-| **API** | Interface for programs to communicate |
-| **REST** | Architectural style using HTTP methods (GET, POST, etc.) |
-| **Controller** | Class that handles API requests |
-| **Endpoint** | A specific URL that accepts requests |
-| **Service** | Class containing business logic |
-| **Entity** | Object with identity (like Blessing with an ID) |
-| **Value Object** | Immutable object defined by values |
-| **DTO** | Data Transfer Object — carries data between layers |
-| **Dependency Injection** | Passing dependencies into classes rather than creating them |
-| **Middleware** | Code that processes requests/responses in a pipeline |
-| **SPA** | Single Page Application — one HTML file, JavaScript handles navigation |
-| **Component** | Reusable piece of UI in React |
-| **State** | Data that can change and triggers re-renders |
-| **Props** | Data passed into a React component |
+| **Semantic Kernel** | Microsoft's SDK for LLM integration (C# LangChain) |
+| **Entity Framework Core** | Microsoft's ORM for .NET |
+| **DbContext** | EF Core class representing a database session |
+| **Repository** | Abstraction layer over data access |
+| **Migration** | Version-controlled database schema change |
+| **Temperature** | AI parameter controlling response randomness |
+| **System Prompt** | Instructions that shape AI personality/behavior |
+| **Clean Architecture** | Layered design with inward dependencies |
+| **Dependency Injection** | Passing dependencies into classes |
+| **Environment Variable** | OS-level configuration value |
+
+---
+
+## Project Statistics
+
+- **Lines of code:** ~2,500
+- **Architecture:** Clean Architecture (4 projects)
+- **Backend:** C# / ASP.NET Core 8.0
+- **AI:** Microsoft Semantic Kernel + OpenAI (gpt-4o-mini)
+- **Database:** PostgreSQL via Entity Framework Core
+- **Frontend:** React 18 (single-file SPA)
+- **Deployment:** Docker on Railway
+- **Domain:** strangels.bw8.org (via Cloudflare)
 
 ---
 
