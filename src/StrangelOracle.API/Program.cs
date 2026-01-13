@@ -13,8 +13,8 @@ var builder = WebApplication.CreateBuilder(args);
 // =============================================================================
 // DATABASE CONFIGURATION (Phase 2)
 // =============================================================================
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
-    ?? Environment.GetEnvironmentVariable("DATABASE_URL")
+var connectionString = Environment.GetEnvironmentVariable("DATABASE_URL")
+    ?? builder.Configuration.GetConnectionString("DefaultConnection")
     ?? throw new InvalidOperationException("Database connection string not configured");
 
 // Railway uses postgres:// but Npgsql expects postgresql://
