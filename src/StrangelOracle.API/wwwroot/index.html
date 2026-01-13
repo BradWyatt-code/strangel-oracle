@@ -1,0 +1,790 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Strangel Oracle</title>
+    <link rel="icon" href="/favicon.ico" type="image/x-icon">
+
+    <!-- Google Fonts (single stylesheet link) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400&family=Spectral:ital,wght@0,300;0,400;1,300&display=swap">
+
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <style>
+        :root {
+            --bg-deep: #0a0a0c;
+            --bg-surface: rgba(10, 12, 15, 0.78);
+
+            --text-primary: #e8e4dd;
+            --text-secondary: #9a958c;
+            --text-dim: #5a564f;
+
+            --accent-heart: #c4a68c;
+            --accent-fox: #d4a574;
+            --accent-furies: #8a9aab;
+            --accent-nokso: #a89080;
+
+            --glow-heart: rgba(196, 166, 140, 0.15);
+            --glow-fox: rgba(212, 165, 116, 0.15);
+            --glow-furies: rgba(138, 154, 171, 0.15);
+            --glow-nokso: rgba(168, 144, 128, 0.15);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Spectral', Georgia, serif;
+            background: var(--bg-deep);
+            background-image: url("/nokso.png");
+            background-repeat: no-repeat;
+            background-size: cover;
+            background-position: center;
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
+            line-height: 1.7;
+        }
+
+        /* Global dark overlay to calm background */
+        body::after {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.18);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        /* Noise texture overlay */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0.03;
+            pointer-events: none;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+            z-index: 1000;
+        }
+
+        #root {
+            min-height: 100vh;
+        }
+
+        /* Ensure content always paints above scrims */
+        .oracle-container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 4rem 2rem;
+            position: relative;
+            z-index: 1; /* above body::after */
+        }
+
+        /* Force all direct children above the container scrim */
+        .oracle-container > * {
+            position: relative;
+            z-index: 2;
+        }
+
+        /* Darken only the top portion so header text always reads */
+        .oracle-container::before {
+            content: "";
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            z-index: 0; /* behind .oracle-container children */
+            background:
+                linear-gradient(to bottom,
+                    rgba(0,0,0,0.65) 0%,
+                    rgba(0,0,0,0.35) 25%,
+                    rgba(0,0,0,0.12) 55%,
+                    rgba(0,0,0,0.30) 100%),
+                radial-gradient(ellipse at center,
+                    rgba(0,0,0,0.10) 0%,
+                    rgba(0,0,0,0.45) 70%,
+                    rgba(0,0,0,0.65) 100%);
+        }
+
+        /* Header */
+        .oracle-header {
+            text-shadow: 0 10px 40px rgba(0,0,0,0.6);
+            text-align: center;
+            margin-bottom: 4rem;
+            opacity: 0;
+            animation: fadeIn 2s ease forwards;
+        }
+
+        .oracle-title {
+            text-shadow: 0 10px 50px rgba(0,0,0,0.75);
+            font-family: 'Cormorant Garamond', Georgia, serif;
+            font-size: clamp(2.5rem, 8vw, 4rem);
+            font-weight: 300;
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+            margin-bottom: 0.5rem;
+            background: linear-gradient(180deg, var(--text-primary) 0%, var(--text-secondary) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .oracle-subtitle {
+            font-size: 0.9rem;
+            color: rgba(242,237,230,0.85);
+            letter-spacing: 0.3em;
+            text-transform: uppercase;
+            font-weight: 300;
+            text-shadow: 0 8px 30px rgba(0,0,0,0.85);
+        }
+
+        .ambient-mood {
+            margin-top: 2rem;
+            font-style: italic;
+            color: rgba(242,237,230,0.78);
+            font-size: 0.95rem;
+            opacity: 0;
+            animation: fadeIn 3s ease 1s forwards;
+            text-shadow: 0 8px 30px rgba(0,0,0,0.85);
+        }
+
+        /* Strangel Cards */
+        .strangels-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1.75rem;
+            margin-bottom: 4rem;
+        }
+
+        @media (max-width: 600px) {
+            .strangels-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .strangel-card {
+            background: var(--surface);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+
+            border: 1px solid rgba(255,255,255,0.10);
+            border-radius: 18px;
+
+            box-shadow:
+                0 20px 70px -40px rgba(0,0,0,0.85),
+                inset 0 1px 0 rgba(255,255,255,0.06);
+
+            padding: 2rem;
+            cursor: pointer;
+            transition: all 0.5s cubic-bezier(0.23, 1, 0.32, 1);
+            position: relative;
+            overflow: hidden;
+            opacity: 0;
+            animation: slideUp 0.8s ease forwards;
+        }
+
+        .strangel-card:nth-child(1) { animation-delay: 0.3s; }
+        .strangel-card:nth-child(2) { animation-delay: 0.5s; }
+        .strangel-card:nth-child(3) { animation-delay: 0.7s; }
+        .strangel-card:nth-child(4) { animation-delay: 0.9s; }
+
+        .strangel-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--card-accent), transparent);
+            opacity: 0;
+            transition: opacity 0.5s ease;
+        }
+
+        .strangel-card:hover::before {
+            opacity: 1;
+        }
+
+        .strangel-card:hover {
+            transform: translateY(-6px);
+            background: var(--surface-strong);
+            border-color: rgba(255,255,255,0.16);
+            box-shadow:
+                0 30px 90px -50px rgba(0,0,0,0.92),
+                0 0 0 1px rgba(255,255,255,0.06),
+                0 20px 60px -20px var(--card-glow);
+        }
+
+        .strangel-card.heart { --card-accent: var(--accent-heart); --card-glow: var(--glow-heart); }
+        .strangel-card.fox { --card-accent: var(--accent-fox); --card-glow: var(--glow-fox); }
+        .strangel-card.furies { --card-accent: var(--accent-furies); --card-glow: var(--glow-furies); }
+        .strangel-card.nokso { --card-accent: var(--accent-nokso); --card-glow: var(--glow-nokso); }
+
+        .strangel-name {
+            font-family: 'Cormorant Garamond', Georgia, serif;
+            font-size: 1.4rem;
+            font-weight: 400;
+            margin-bottom: 0.25rem;
+            color: var(--card-accent);
+        }
+
+        .strangel-title {
+            font-size: 0.75rem;
+            color: rgba(242,237,230,0.70);
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+            margin-bottom: 1rem;
+        }
+
+        .strangel-aspect {
+            font-style: italic;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            margin-bottom: 1rem;
+        }
+
+        .strangel-instruction {
+            font-size: 0.85rem;
+            color: rgba(242,237,230,0.78);
+            line-height: 1.6;
+        }
+
+        /* Blessing Panel */
+        .blessing-panel {
+            backdrop-filter: blur(6px);
+            background: var(--bg-surface);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            padding: 3rem;
+            margin-bottom: 2rem;
+            opacity: 0;
+            animation: fadeIn 0.8s ease forwards;
+        }
+
+        .blessing-panel.heart { border-top: 2px solid var(--accent-heart); }
+        .blessing-panel.fox { border-top: 2px solid var(--accent-fox); }
+        .blessing-panel.furies { border-top: 2px solid var(--accent-furies); }
+        .blessing-panel.nokso { border-top: 2px solid var(--accent-nokso); }
+
+        .panel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 2rem;
+        }
+
+        .panel-strangel {
+            font-family: 'Cormorant Garamond', Georgia, serif;
+            font-size: 1.8rem;
+            font-weight: 400;
+        }
+
+        .back-button {
+            background: none;
+            border: 1px solid var(--text-dim);
+            color: var(--text-dim);
+            padding: 0.5rem 1rem;
+            font-family: inherit;
+            font-size: 0.8rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            letter-spacing: 0.1em;
+        }
+
+        .back-button:hover {
+            border-color: var(--text-secondary);
+            color: var(--text-secondary);
+        }
+
+        /* Touch Area for Woman with Heart */
+        .touch-area {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 3rem 0;
+        }
+
+        .heart-symbol {
+            width: 120px;
+            height: 120px;
+            position: relative;
+            cursor: pointer;
+            transition: all 0.5s ease;
+            margin-bottom: 2rem;
+        }
+
+        .heart-symbol::before {
+            content: '♡';
+            font-size: 100px;
+            color: var(--accent-heart);
+            opacity: 0.7;
+            transition: all 0.3s ease;
+            display: block;
+            text-align: center;
+            line-height: 120px;
+        }
+
+        .heart-symbol:hover::before {
+            opacity: 1;
+            text-shadow: 0 0 40px var(--glow-heart);
+        }
+
+        .heart-symbol.touched::before {
+            animation: heartPulse 1s ease;
+        }
+
+        .touch-instruction {
+            color: var(--text-dim);
+            font-style: italic;
+            font-size: 0.9rem;
+        }
+
+        /* Petition Form */
+        .petition-form {
+            margin-top: 2rem;
+        }
+
+        .petition-input {
+            width: 100%;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: var(--text-primary);
+            padding: 1rem;
+            font-family: inherit;
+            font-size: 1rem;
+            resize: vertical;
+            min-height: 100px;
+            margin-bottom: 1rem;
+            transition: border-color 0.3s ease;
+        }
+
+        .petition-input:focus {
+            outline: none;
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .petition-input::placeholder {
+            color: var(--text-dim);
+            font-style: italic;
+        }
+
+        .submit-petition {
+            background: transparent;
+            border: 1px solid var(--text-secondary);
+            color: var(--text-secondary);
+            padding: 0.75rem 2rem;
+            font-family: 'Cormorant Garamond', Georgia, serif;
+            font-size: 1rem;
+            cursor: pointer;
+            letter-spacing: 0.15em;
+            transition: all 0.3s ease;
+        }
+
+        .submit-petition:hover:not(:disabled) {
+            background: rgba(255, 255, 255, 0.05);
+            border-color: var(--text-primary);
+            color: var(--text-primary);
+        }
+
+        .submit-petition:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* Blessing Response */
+        .blessing-response {
+            padding: 2rem 0;
+            opacity: 0;
+            animation: fadeIn 1s ease forwards;
+        }
+
+        .blessing-message {
+            font-size: 1.2rem;
+            line-height: 1.8;
+            margin-bottom: 1.5rem;
+            color: var(--text-primary);
+        }
+
+        .blessing-meta {
+            display: flex;
+            gap: 2rem;
+            margin-top: 1.5rem;
+            font-size: 0.8rem;
+            color: var(--text-dim);
+        }
+
+        /* Loading State */
+        .loading {
+            text-align: center;
+            padding: 3rem;
+            color: var(--text-dim);
+            font-style: italic;
+        }
+
+        .loading::after {
+            content: '';
+            animation: ellipsis 1.5s infinite;
+        }
+
+        /* Footer */
+        .oracle-footer {
+            text-align: center;
+            padding: 3rem 0;
+            color: rgba(242,237,230,0.55);
+            text-shadow: 0 8px 30px rgba(0,0,0,0.8);
+            font-size: 0.8rem;
+            opacity: 0;
+            animation: fadeIn 2s ease 1.5s forwards;
+        }
+
+        .oracle-footer a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            border-bottom: 1px solid transparent;
+            transition: border-color 0.3s ease;
+        }
+
+        .oracle-footer a:hover {
+            border-color: var(--text-secondary);
+        }
+
+        /* Animations */
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes heartPulse {
+            0% { transform: scale(1); }
+            25% { transform: scale(1.1); }
+            50% { transform: scale(1); }
+            75% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+
+        @keyframes ellipsis {
+            0% { content: ''; }
+            33% { content: '.'; }
+            66% { content: '..'; }
+            100% { content: '...'; }
+        }
+    </style>
+</head>
+
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState } = React;
+
+        // API Configuration
+        const API_BASE = window.location.origin;
+
+        // Session ID for Soul Ledger tracking
+        const getSessionId = () => {
+            let sessionId = localStorage.getItem('strangel_session');
+            if (!sessionId) {
+                sessionId = 'soul-' + Math.random().toString(36).substr(2, 9);
+                localStorage.setItem('strangel_session', sessionId);
+            }
+            return sessionId;
+        };
+
+        // Phase 2 API Functions
+        const api = {
+            async consult(strangel, petition) {
+                const res = await fetch(`${API_BASE}/api/Oracle/consult`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        sessionId: getSessionId(),
+                        strangel: strangel,
+                        petition: petition
+                    })
+                });
+                return res.json();
+            },
+            async touch() {
+                const res = await fetch(`${API_BASE}/api/Oracle/touch`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        sessionId: getSessionId()
+                    })
+                });
+                return res.json();
+            }
+        };
+
+        // Static Strangel data
+        const STRANGELS = [
+            {
+                type: 'WomanWithHeart',
+                name: 'The Woman with Heart',
+                title: 'She Who Bears',
+                aspect: 'Devotion without irony. Touch her image. She receives.',
+                instruction: 'Touch the heart. No words needed.'
+            },
+            {
+                type: 'Fox',
+                name: 'The Fox',
+                title: 'Murat Askarov, The Possessed',
+                aspect: 'A trickster demi-god. Petition him with questions.',
+                instruction: 'Accept that he may not answer, or may answer wrong on purpose.'
+            },
+            {
+                type: 'Furies',
+                name: 'The Furies',
+                title: 'Alecto, Megaera, Tisiphone',
+                aspect: 'Ancient avengers appearing as seagulls.',
+                instruction: 'Confess to them. They will judge.'
+            },
+            {
+                type: 'Nokso',
+                name: "Nok'so",
+                title: 'The Falcon',
+                aspect: 'Protector and disruptor.',
+                instruction: 'Invoke her when something needs breaking.'
+            }
+        ];
+
+        // Ambient mood based on time
+        const getAmbientMood = () => {
+            const hour = new Date().getHours();
+            if (hour >= 0 && hour < 4) return "The city sleeps. The Strangels are closer.";
+            if (hour >= 4 && hour < 7) return "The hour of the threshold. Anything can cross.";
+            if (hour >= 7 && hour < 12) return "Daylight presses. They retreat to edges.";
+            if (hour >= 12 && hour < 17) return "The afternoon haze. They watch from shadows.";
+            if (hour >= 17 && hour < 20) return "The golden hour. The Woman with Heart is strongest.";
+            if (hour >= 20 && hour < 23) return "Night falls. The Fox begins to move.";
+            return "The Furies circle. Judgment hangs in the air.";
+        };
+
+        // Strangel Card Component
+        function StrangelCard({ strangel, onClick }) {
+            const typeClass =
+                strangel.type === 'WomanWithHeart' ? 'heart' :
+                strangel.type === 'Fox' ? 'fox' :
+                strangel.type === 'Furies' ? 'furies' : 'nokso';
+
+            return (
+                <div className={`strangel-card ${typeClass}`} onClick={onClick}>
+                    <div className="strangel-name">{strangel.name}</div>
+                    <div className="strangel-title">{strangel.title}</div>
+                    <div className="strangel-aspect">{strangel.aspect}</div>
+                    <div className="strangel-instruction">{strangel.instruction}</div>
+                </div>
+            );
+        }
+
+        // Woman with Heart Panel
+        function HeartPanel({ onBack }) {
+            const [blessing, setBlessing] = useState(null);
+            const [loading, setLoading] = useState(false);
+            const [touched, setTouched] = useState(false);
+
+            const handleTouch = async () => {
+                setTouched(true);
+                setLoading(true);
+                try {
+                    const result = await api.touch();
+                    setBlessing(result);
+                } catch (error) {
+                    console.error('Error touching heart:', error);
+                }
+                setLoading(false);
+                setTimeout(() => setTouched(false), 1000);
+            };
+
+            return (
+                <div className="blessing-panel heart">
+                    <div className="panel-header">
+                        <div className="panel-strangel">The Woman with Heart</div>
+                        <button className="back-button" onClick={onBack}>Return</button>
+                    </div>
+
+                    {!blessing && !loading && (
+                        <div className="touch-area">
+                            <div
+                                className={`heart-symbol ${touched ? 'touched' : ''}`}
+                                onClick={handleTouch}
+                            />
+                            <div className="touch-instruction">
+                                Touch the heart. She receives.
+                            </div>
+                        </div>
+                    )}
+
+                    {loading && (
+                        <div className="loading">Something shifts</div>
+                    )}
+
+                    {blessing && (
+                        <BlessingResponse blessing={blessing} onAgain={() => setBlessing(null)} />
+                    )}
+                </div>
+            );
+        }
+
+        // Petition Panel (Fox, Furies, Nokso)
+        function PetitionPanel({ strangel, onBack }) {
+            const [petition, setPetition] = useState('');
+            const [blessing, setBlessing] = useState(null);
+            const [loading, setLoading] = useState(false);
+
+            const typeClass =
+                strangel.type === 'Fox' ? 'fox' :
+                strangel.type === 'Furies' ? 'furies' : 'nokso';
+
+            const placeholder = strangel.type === 'Fox'
+                ? 'Ask your question...'
+                : strangel.type === 'Furies'
+                ? 'What weighs on you...'
+                : 'What needs breaking...';
+
+            const handleSubmit = async () => {
+                setLoading(true);
+                try {
+                    const result = await api.consult(strangel.type, petition);
+                    setBlessing(result);
+                } catch (error) {
+                    console.error('Error seeking blessing:', error);
+                }
+                setLoading(false);
+            };
+
+            const handleAgain = () => {
+                setBlessing(null);
+                setPetition('');
+            };
+
+            return (
+                <div className={`blessing-panel ${typeClass}`}>
+                    <div className="panel-header">
+                        <div className="panel-strangel">{strangel.name}</div>
+                        <button className="back-button" onClick={onBack}>Return</button>
+                    </div>
+
+                    {!blessing && !loading && (
+                        <div className="petition-form">
+                            <textarea
+                                className="petition-input"
+                                placeholder={placeholder}
+                                value={petition}
+                                onChange={(e) => setPetition(e.target.value)}
+                            />
+                            <button
+                                className="submit-petition"
+                                onClick={handleSubmit}
+                                disabled={!petition.trim()}
+                            >
+                                {strangel.type === 'Fox' ? 'Petition' :
+                                 strangel.type === 'Furies' ? 'Confess' : 'Invoke'}
+                            </button>
+                        </div>
+                    )}
+
+                    {loading && (
+                        <div className="loading">
+                            {strangel.type === 'Furies' ? 'The Furies deliberate' :
+                             strangel.type === 'Fox' ? 'The Fox considers' :
+                             "Nok'so descends"}
+                        </div>
+                    )}
+
+                    {blessing && (
+                        <BlessingResponse blessing={blessing} onAgain={handleAgain} />
+                    )}
+                </div>
+            );
+        }
+
+        // Blessing Response Component
+        function BlessingResponse({ blessing, onAgain }) {
+            return (
+                <div className="blessing-response">
+                    <div className="blessing-message">{blessing.message}</div>
+
+                    <div className="blessing-meta">
+                        <span>Outcome: {blessing.outcome}</span>
+                        <span>Intensity: {(blessing.intensity * 100).toFixed(0)}%</span>
+                    </div>
+
+                    <button
+                        className="submit-petition"
+                        onClick={onAgain}
+                        style={{ marginTop: '2rem' }}
+                    >
+                        Approach Again
+                    </button>
+                </div>
+            );
+        }
+
+        // Main App Component
+        function App() {
+            const [selectedStrangel, setSelectedStrangel] = useState(null);
+
+            const handleBack = () => setSelectedStrangel(null);
+
+            return (
+                <div className="oracle-container">
+                    <header className="oracle-header">
+                        <h1 className="oracle-title">The Strangel Oracle</h1>
+                        <div className="oracle-subtitle">A Devotional Engine</div>
+                        <div className="ambient-mood">{getAmbientMood()}</div>
+                    </header>
+
+                    {!selectedStrangel ? (
+                        <div className="strangels-grid">
+                            {STRANGELS.map((strangel) => (
+                                <StrangelCard
+                                    key={strangel.type}
+                                    strangel={strangel}
+                                    onClick={() => setSelectedStrangel(strangel)}
+                                />
+                            ))}
+                        </div>
+                    ) : selectedStrangel.type === 'WomanWithHeart' ? (
+                        <HeartPanel onBack={handleBack} />
+                    ) : (
+                        <PetitionPanel strangel={selectedStrangel} onBack={handleBack} />
+                    )}
+
+                    <footer className="oracle-footer">
+                        <p>The Strangels are always watching.</p>
+                        <p style={{ marginTop: '0.5rem' }}>
+                            <a href="/swagger">API Documentation</a> ·
+                            <a href="https://github.com/BradWyatt-code/strangel-oracle" style={{ marginLeft: '1rem' }}>How It Works</a> ·
+                            <a href="https://bw8.org" style={{ marginLeft: '1rem' }}>Brad Wyatt</a>
+                        </p>
+                    </footer>
+                </div>
+            );
+        }
+
+        // Render
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
