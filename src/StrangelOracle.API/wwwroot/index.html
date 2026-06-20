@@ -782,9 +782,14 @@
             );
         }
 
-        // Render
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<App />);
+// Render
+        if (typeof Babel === 'undefined' || typeof React === 'undefined') {
+            document.getElementById('root').innerHTML =
+                '<p style="color:#9a958c;text-align:center;margin-top:30vh;font-family:serif">The Oracle could not load its scripts. Refresh, or check the console.</p>';
+        } else {
+            const root = ReactDOM.createRoot(document.getElementById('root'));
+            root.render(<App />);
+        }
     </script>
 </body>
 </html>
